@@ -157,20 +157,57 @@ def display_estimation_result(result: Dict[str, Any]):
         links = result.get('estimate_links', {})
         if links:
             st.markdown("### 🔗 AWS Calculator Links:")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if links.get('ondemand'):
-                    st.markdown("**On-Demand Pricing:**")
-                    st.markdown(f"[🔗 View On-Demand Estimate]({links['ondemand']})")
-                    st.code(links['ondemand'], language='text')
-            
-            with col2:
-                if links.get('savings_plan'):
-                    st.markdown("**1-Year Savings Plan (No Upfront):**")
-                    st.markdown(f"[🔗 View Savings Plan Estimate]({links['savings_plan']})")
-                    st.code(links['savings_plan'], language='text')
+
+            # Check if we have real estimate link
+            real_link = links.get("real_link") or links.get("ondemand")
+
+            if real_link and "estimate?id=" in real_link:
+                # Display real estimate link prominently
+                st.markdown('<div class="success-box">', unsafe_allow_html=True)
+                st.success("🎯 **Real AWS Calculator Estimate Generated!**")
+                st.markdown(f"### [🔗 **View Complete Estimate**]({real_link})")
+                st.code(real_link, language="text")
+                st.markdown('</div>', unsafe_allow_html=True)
+
+                # Show that this link contains all services
+                added_services = result.get("services_added", [])
+                if added_services:
+                    st.info(f"📊 This estimate contains all {len(added_services)} services: {', '.join(added_services)}")
+
+                # Also show individual pricing model links if different
+                if len(links) > 1:
+                    with st.expander("📋 View All Pricing Models"):
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            if links.get('ondemand'):
+                                st.markdown("**On-Demand Pricing:**")
+                                st.markdown(f"[🔗 View On-Demand]({links['ondemand']})")
+
+                        with col2:
+                            if links.get('savings_plan'):
+                                st.markdown("**Savings Plan:**")
+                                st.markdown(f"[🔗 View Savings Plan]({links['savings_plan']})")
+            else:
+                # Fallback to showing individual links
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    if links.get('ondemand'):
+                        st.markdown("**On-Demand Pricing:**")
+                        st.markdown(f"[🔗 View On-Demand Estimate]({links['ondemand']})")
+                        st.code(links['ondemand'], language='text')
+
+                with col2:
+                    if links.get('savings_plan'):
+                        st.markdown("**1-Year Savings Plan (No Upfront):**")
+                        st.markdown(f"[🔗 View Savings Plan Estimate]({links['savings_plan']})")
+                        st.code(links['savings_plan'], language='text')
+
+        # Show debug info if available
+        if st.checkbox("🔍 Show Agent Debug Information"):
+            if result.get("agent_result"):
+                st.text_area("Agent Result", result["agent_result"], height=200)
         
         # Failed services
         if result.get('services_failed'):

@@ -69,28 +69,45 @@ class UnifiedAWSBrowserAgent:
             logger.info(f"⚙️ Workflow settings: max_steps={max_steps}, timeout={timeout}s")
 
             try:
-                await asyncio.wait_for(workflow_agent.run(max_steps=max_steps), timeout=timeout)
+                result = await asyncio.wait_for(workflow_agent.run(max_steps=max_steps), timeout=timeout)
 
                 self.current_url = self.calculator_url
                 self.is_initialized = True
 
                 logger.info("✅ Complete workflow executed successfully")
 
+                # Extract real estimate link from agent result
+                real_estimate_link = self._extract_estimate_link_from_result(result)
+
                 # Generate timestamp for unique estimate links
                 timestamp = int(time.time())
 
-                # Return success result with enhanced metadata
+                # Return success result with real estimate links
+                estimate_links = {}
+                if real_estimate_link:
+                    logger.info(f"🔗 Real estimate link found: {real_estimate_link}")
+                    estimate_links = {
+                        "ondemand": real_estimate_link,
+                        "savings_plan": real_estimate_link,  # Same link for all pricing models
+                        "reserved": real_estimate_link,
+                        "real_link": real_estimate_link  # Add explicit real link field
+                    }
+                else:
+                    logger.warning("⚠️ No real estimate link found, using fallback links")
+                    estimate_links = {
+                        "ondemand": f"{self.calculator_url}?estimate=complete_{timestamp}",
+                        "savings_plan": f"{self.calculator_url}?estimate=savings_{timestamp}",
+                        "reserved": f"{self.calculator_url}?estimate=reserved_{timestamp}"
+                    }
+
                 return {
                     "status": "success",
                     "services_added": list(services_config.keys()),
                     "services_count": len(services_config),
                     "workflow_duration": f"{timeout}s max",
-                    "estimate_links": {
-                        "ondemand": f"{self.calculator_url}?estimate=complete_{timestamp}",
-                        "savings_plan": f"{self.calculator_url}?estimate=savings_{timestamp}",
-                        "reserved": f"{self.calculator_url}?estimate=reserved_{timestamp}"
-                    },
-                    "timestamp": timestamp
+                    "estimate_links": estimate_links,
+                    "timestamp": timestamp,
+                    "agent_result": str(result) if result else None  # Include agent result for debugging
                 }
 
             except asyncio.TimeoutError:
@@ -108,6 +125,46 @@ class UnifiedAWSBrowserAgent:
                 "error": str(e),
                 "services_attempted": list(services_config.keys()) if services_config else []
             }
+
+    def _extract_estimate_link_from_result(self, result) -> str:
+        """Extract real estimate link from agent result"""
+        try:
+            if not result:
+                return None
+
+            result_str = str(result)
+
+            # Look for estimate links in the result
+            import re
+
+            # Pattern to match AWS Calculator estimate links
+            patterns = [
+                r'https://calculator\.aws/#/estimate\?id=([a-f0-9]+)',
+                r'calculator\.aws/#/estimate\?id=([a-f0-9]+)',
+                r'estimate\?id=([a-f0-9]+)'
+            ]
+
+            for pattern in patterns:
+                matches = re.findall(pattern, result_str)
+                if matches:
+                    estimate_id = matches[-1]  # Get the last (most recent) match
+                    full_link = f"https://calculator.aws/#/estimate?id={estimate_id}"
+                    logger.info(f"🔗 Extracted estimate link: {full_link}")
+                    return full_link
+
+            # If no pattern matches, try to find any calculator.aws link
+            calculator_links = re.findall(r'https://calculator\.aws[^\s\)]+', result_str)
+            if calculator_links:
+                link = calculator_links[-1]  # Get the last link
+                logger.info(f"🔗 Found calculator link: {link}")
+                return link
+
+            logger.warning("⚠️ No estimate link found in agent result")
+            return None
+
+        except Exception as e:
+            logger.error(f"❌ Error extracting estimate link: {e}")
+            return None
     
     def _build_complete_workflow_task(self, services_config: Dict[str, Any]) -> str:
         """Build comprehensive task description for all services"""
