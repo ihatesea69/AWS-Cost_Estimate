@@ -1,0 +1,348 @@
+# ===================================
+# AWS Cost Estimation Agent - .gitignore
+# ===================================
+
+# ===================================
+# Environment & Configuration Files
+# ===================================
+# Environment variables và API keys
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.staging
+env_example.txt
+.envrc
+
+# Configuration files với thông tin nhạy cảm
+config.ini
+config.json
+config.yaml
+config.yml
+settings.json
+secrets.json
+credentials.json
+
+# AWS credentials
+.aws/
+aws-credentials.json
+aws-config.json
+
+# ===================================
+# API Keys & Credentials
+# ===================================
+# OpenAI API keys
+openai_api_key.txt
+api_keys.txt
+keys.txt
+
+# Database credentials
+database.env
+db_credentials.json
+
+# Service account keys
+service-account-key.json
+gcp-credentials.json
+
+# ===================================
+# Python Specific
+# ===================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# ===================================
+# Browser & Automation
+# ===================================
+# Browser profiles và cache
+browser_profiles/
+chrome_profile/
+firefox_profile/
+browser_cache/
+browser_data/
+
+# Screenshots và recordings
+screenshots/
+recordings/
+browser_screenshots/
+test_screenshots/
+
+# Browser automation logs
+browser_logs/
+selenium_logs/
+playwright_logs/
+
+# ===================================
+# Logs & Monitoring
+# ===================================
+# Log files
+*.log
+logs/
+log/
+*.log.*
+debug.log
+error.log
+access.log
+application.log
+workflow.log
+performance.log
+
+# Monitoring data
+monitoring_data/
+metrics/
+performance_data/
+
+# ===================================
+# Temporary & Cache Files
+# ===================================
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+.tmp/
+
+# Cache directories
+.cache/
+cache/
+.pytest_cache/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ===================================
+# IDE & Editor Files
+# ===================================
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ===================================
+# Data & Output Files
+# ===================================
+# Data files
+data/
+datasets/
+*.csv
+*.xlsx
+*.json
+*.xml
+
+# Output files
+output/
+results/
+reports/
+exports/
+
+# Backup files
+*.bak
+*.backup
+backup/
+
+# ===================================
+# Development & Testing
+# ===================================
+# Test files
+test_results/
+test_output/
+.coverage
+htmlcov/
+
+# Development databases
+*.db
+*.sqlite
+*.sqlite3
+
+# ===================================
+# Deployment & Production
+# ===================================
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Kubernetes
+*.kubeconfig
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# ===================================
+# Custom Project Specific
+# ===================================
+# AWS Calculator specific
+calculator_sessions/
+estimation_cache/
+workflow_cache/
+
+# Custom logs
+aws_cost_estimation.log
+browser_automation.log
+workflow_execution.log
+
+# User data
+user_configs/
+user_templates/
+custom_templates/
+
+# Performance data
+performance_metrics/
+execution_times/
+
+# Debug files
+debug_output/
+debug_screenshots/
+debug_logs/
