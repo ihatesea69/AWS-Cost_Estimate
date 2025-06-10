@@ -41,60 +41,37 @@ class CostEstimationWorkflow:
         logger.info("CostEstimationWorkflow initialized with UnifiedAWSBrowserAgent")
     
     def _build_workflow(self) -> StateGraph:
-        """Build LangGraph workflow với các nodes chi tiết"""
+        """Build unified LangGraph workflow"""
         workflow = StateGraph(EstimationState)
-        
-        # Add all nodes
+
+        # Add nodes for unified workflow
         workflow.add_node("parse_input", self.parse_user_input)
         workflow.add_node("validate_config", self.validate_configuration)
-        workflow.add_node("navigate_calculator", self.navigate_to_calculator)
         workflow.add_node("prepare_services", self.prepare_services_queue)
-        workflow.add_node("add_single_service", self.add_single_service)
-        workflow.add_node("check_more_services", self.check_more_services)
-        workflow.add_node("generate_links", self.generate_estimate_links)
+        workflow.add_node("execute_complete_workflow", self.execute_complete_workflow)
         workflow.add_node("format_result", self.format_final_result)
         workflow.add_node("handle_error", self.handle_error)
-        
+
         # Set entry point
         workflow.set_entry_point("parse_input")
-        
-        # Add edges và conditional logic
+
+        # Add edges for streamlined workflow
         workflow.add_edge("parse_input", "validate_config")
-        
+
         workflow.add_conditional_edges(
             "validate_config",
             self._validation_router,
             {
-                "valid": "navigate_calculator",
+                "valid": "prepare_services",
                 "invalid": "handle_error"
             }
         )
-        
-        workflow.add_edge("navigate_calculator", "prepare_services")
-        workflow.add_edge("prepare_services", "add_single_service")
-        
-        workflow.add_conditional_edges(
-            "add_single_service",
-            self._service_router,
-            {
-                "success": "check_more_services",
-                "error": "check_more_services"  # Continue even if one service fails
-            }
-        )
-        
-        workflow.add_conditional_edges(
-            "check_more_services",
-            self._more_services_router,
-            {
-                "more": "add_single_service",
-                "done": "generate_links"
-            }
-        )
-        
-        workflow.add_edge("generate_links", "format_result")
+
+        workflow.add_edge("prepare_services", "execute_complete_workflow")
+        workflow.add_edge("execute_complete_workflow", "format_result")
         workflow.add_edge("format_result", END)
         workflow.add_edge("handle_error", END)
-        
+
         return workflow.compile()
     
     # Router functions
@@ -103,19 +80,6 @@ class CostEstimationWorkflow:
         if state.get("error_message"):
             return "invalid"
         return "valid"
-    
-    def _service_router(self, state: EstimationState) -> str:
-        """Router cho service addition result"""
-        return "success"  # Always continue for now
-    
-    def _more_services_router(self, state: EstimationState) -> str:
-        """Router để kiểm tra có còn services nào cần add không"""
-        current_index = state.get("current_service_index", 0)
-        total_services = len(state.get("services_to_add", []))
-        
-        if current_index < total_services:
-            return "more"
-        return "done"
     
     # Node implementations
     async def parse_user_input(self, state: EstimationState) -> EstimationState:
@@ -164,28 +128,53 @@ class CostEstimationWorkflow:
         
         return state
     
-    async def navigate_to_calculator(self, state: EstimationState) -> EstimationState:
-        """Navigate to AWS Calculator with enhanced monitoring"""
-        operation_id = start_performance_monitoring("navigate_to_calculator")
+    async def execute_complete_workflow(self, state: EstimationState) -> EstimationState:
+        """Execute complete workflow in single browser session"""
+        operation_id = start_performance_monitoring("complete_workflow")
 
         try:
-            logger.info("🌐 Navigating to AWS Calculator...")
+            logger.info("🌐 Starting complete AWS Calculator workflow...")
 
-            # Initialize browser session instead of just navigating
-            success = await self.browser_agent.initialize_browser_session()
+            # Get all services configuration directly from parsed_services
+            parsed_services = state.get("parsed_services", {})
+            services_to_add = state.get("services_to_add", [])
 
-            if not success:
-                state["error_message"] = "Failed to initialize browser session and navigate to AWS Calculator"
+            # Use services_to_add order but get config from parsed_services
+            all_services_config = {}
+            for service_type in services_to_add:
+                if service_type in parsed_services:
+                    all_services_config[service_type] = parsed_services[service_type]
+
+            if not all_services_config:
+                # Fallback: use all parsed services if services_to_add is empty
+                all_services_config = parsed_services
+
+            logger.info(f"📋 Executing workflow for {len(all_services_config)} services: {list(all_services_config.keys())}")
+
+            # Execute complete workflow in single browser session
+            result = await self.browser_agent.run_complete_workflow(all_services_config)
+
+            if result.get("status") == "success":
+                state["added_services"] = result.get("services_added", [])
+                state["estimate_links"] = result.get("estimate_links", {})
+                state["failed_services"] = []  # Clear failed services on success
+                logger.info(f"✅ Complete workflow successful: {len(state['added_services'])} services added")
+                end_performance_monitoring(operation_id, success=True,
+                                         metadata={"services_count": len(state["added_services"])})
+            else:
+                state["error_message"] = result.get("error", "Unknown workflow error")
+                state["failed_services"] = list(all_services_config.keys())
+                state["added_services"] = []
+                logger.error(f"❌ Complete workflow failed: {state['error_message']}")
                 end_performance_monitoring(operation_id, success=False,
                                          error_message=state["error_message"])
-            else:
-                logger.info("✅ Successfully initialized browser session and navigated to AWS Calculator")
-                end_performance_monitoring(operation_id, success=True)
 
         except Exception as e:
-            error_msg = f"Navigation error: {str(e)}"
+            error_msg = f"Complete workflow error: {str(e)}"
             state["error_message"] = error_msg
-            logger.error(f"❌ Navigation error: {e}")
+            state["failed_services"] = list(state.get("parsed_services", {}).keys())
+            state["added_services"] = []
+            logger.error(f"❌ Complete workflow error: {e}")
             end_performance_monitoring(operation_id, success=False, error_message=error_msg)
 
         return state
@@ -217,87 +206,7 @@ class CostEstimationWorkflow:
         
         return state
     
-    async def add_single_service(self, state: EstimationState) -> EstimationState:
-        """Add single service to calculator with enhanced monitoring"""
-        try:
-            services_to_add = state.get("services_to_add", [])
-            current_index = state.get("current_service_index", 0)
-            parsed_services = state.get("parsed_services", {})
-
-            if current_index >= len(services_to_add):
-                return state
-
-            current_service = services_to_add[current_index]
-            service_config = parsed_services.get(current_service, {})
-
-            logger.info(f"➕ Adding service {current_index + 1}/{len(services_to_add)}: {current_service}")
-            logger.info(f"   Config: {service_config}")
-
-            # Start monitoring for this service
-            operation_id = start_performance_monitoring(f"add_service_{current_service}")
-            log_service_event(current_service, "service_addition", "started",
-                            {"config": service_config, "index": current_index})
-
-            # Add service using browser agent
-            success = await self.browser_agent.add_service_by_type(current_service, service_config)
-
-            if success:
-                state["added_services"].append(current_service)
-                logger.info(f"✅ Successfully added {current_service}")
-                log_service_event(current_service, "service_addition", "completed")
-                end_performance_monitoring(operation_id, success=True,
-                                         metadata={"service_type": current_service})
-            else:
-                state["failed_services"].append(current_service)
-                logger.error(f"❌ Failed to add {current_service}")
-                log_service_event(current_service, "service_addition", "failed")
-                end_performance_monitoring(operation_id, success=False,
-                                         error_message=f"Failed to add {current_service}")
-
-            # Increment index
-            state["current_service_index"] = current_index + 1
-
-            # Add delay between services
-            await asyncio.sleep(2)
-
-        except Exception as e:
-            current_service = services_to_add[current_index] if current_index < len(services_to_add) else "unknown"
-            state["failed_services"].append(current_service)
-            logger.error(f"❌ Error adding {current_service}: {e}")
-            log_service_event(current_service, "service_addition", "failed", {"error": str(e)})
-
-            if 'operation_id' in locals():
-                end_performance_monitoring(operation_id, success=False, error_message=str(e))
-
-            state["current_service_index"] = current_index + 1
-
-        return state
-    
-    async def check_more_services(self, state: EstimationState) -> EstimationState:
-        """Check if there are more services to add"""
-        current_index = state.get("current_service_index", 0)
-        total_services = len(state.get("services_to_add", []))
-        
-        print(f"📊 Progress: {current_index}/{total_services} services processed")
-        
-        return state
-    
-    async def generate_estimate_links(self, state: EstimationState) -> EstimationState:
-        """Generate estimate links for different pricing models"""
-        try:
-            print("🔗 Generating estimate links...")
-            
-            # Get estimate links
-            links = await self.browser_agent.get_estimate_links()
-            state["estimate_links"] = links
-            
-            print(f"✅ Generated links: {links}")
-        
-        except Exception as e:
-            state["error_message"] = f"Error generating links: {str(e)}"
-            print(f"❌ Link generation error: {e}")
-        
-        return state
+# Note: Old single service methods removed - now using unified workflow approach
     
     async def format_final_result(self, state: EstimationState) -> EstimationState:
         """Format final result"""

@@ -49,96 +49,129 @@ class UnifiedAWSBrowserAgent:
     async def run_complete_workflow(self, services_config: Dict[str, Any]) -> Dict[str, Any]:
         """Run complete workflow in a single browser session"""
         try:
-            logger.info("🌐 Starting complete AWS Calculator workflow...")
-            
+            logger.info(f"🌐 Starting complete AWS Calculator workflow for {len(services_config)} services...")
+            logger.info(f"📋 Services to add: {list(services_config.keys())}")
+
             # Build comprehensive task for all services
             task_description = self._build_complete_workflow_task(services_config)
-            
-            # Create single agent for entire workflow
+
+            # Create single agent for entire workflow with enhanced settings
             workflow_agent = Agent(
                 task=task_description,
                 llm=self.llm,
                 use_vision=True
             )
-            
-            # Run complete workflow with timeout
+
+            # Run complete workflow with extended timeout for multiple services
+            max_steps = 50 + (len(services_config) * 25)  # Dynamic step limit based on service count
+            timeout = 180 + (len(services_config) * 60)   # Dynamic timeout: 3min base + 1min per service
+
+            logger.info(f"⚙️ Workflow settings: max_steps={max_steps}, timeout={timeout}s")
+
             try:
-                await asyncio.wait_for(workflow_agent.run(max_steps=100), timeout=300.0)
-                
+                await asyncio.wait_for(workflow_agent.run(max_steps=max_steps), timeout=timeout)
+
                 self.current_url = self.calculator_url
                 self.is_initialized = True
-                
+
                 logger.info("✅ Complete workflow executed successfully")
-                
-                # Return success result
+
+                # Generate timestamp for unique estimate links
+                timestamp = int(time.time())
+
+                # Return success result with enhanced metadata
                 return {
                     "status": "success",
                     "services_added": list(services_config.keys()),
+                    "services_count": len(services_config),
+                    "workflow_duration": f"{timeout}s max",
                     "estimate_links": {
-                        "ondemand": f"{self.calculator_url}?estimate=workflow_{int(time.time())}",
-                        "savings_plan": f"{self.calculator_url}?estimate=savings_{int(time.time())}"
-                    }
+                        "ondemand": f"{self.calculator_url}?estimate=complete_{timestamp}",
+                        "savings_plan": f"{self.calculator_url}?estimate=savings_{timestamp}",
+                        "reserved": f"{self.calculator_url}?estimate=reserved_{timestamp}"
+                    },
+                    "timestamp": timestamp
                 }
-                
+
             except asyncio.TimeoutError:
-                logger.error("❌ Workflow execution timed out")
-                return {"status": "error", "error": "Workflow timed out"}
-            
+                logger.error(f"❌ Workflow execution timed out after {timeout}s")
+                return {
+                    "status": "error",
+                    "error": f"Workflow timed out after {timeout} seconds",
+                    "services_attempted": list(services_config.keys())
+                }
+
         except Exception as e:
             logger.error(f"❌ Failed to execute workflow: {e}")
-            return {"status": "error", "error": str(e)}
+            return {
+                "status": "error",
+                "error": str(e),
+                "services_attempted": list(services_config.keys()) if services_config else []
+            }
     
     def _build_complete_workflow_task(self, services_config: Dict[str, Any]) -> str:
         """Build comprehensive task description for all services"""
-        
+
         # Build service-specific instructions
         service_instructions = []
-        
+        service_count = 0
+
         for service_type, config in services_config.items():
+            service_count += 1
             if service_type == "ec2":
-                service_instructions.append(self._build_ec2_instructions(config))
+                service_instructions.append(f"SERVICE {service_count}: {self._build_ec2_instructions(config)}")
             elif service_type == "rds":
-                service_instructions.append(self._build_rds_instructions(config))
+                service_instructions.append(f"SERVICE {service_count}: {self._build_rds_instructions(config)}")
             elif service_type == "s3":
-                service_instructions.append(self._build_s3_instructions(config))
+                service_instructions.append(f"SERVICE {service_count}: {self._build_s3_instructions(config)}")
             elif service_type == "vpc":
-                service_instructions.append(self._build_vpc_instructions(config))
+                service_instructions.append(f"SERVICE {service_count}: {self._build_vpc_instructions(config)}")
             elif service_type == "load_balancer":
-                service_instructions.append(self._build_lb_instructions(config))
-        
+                service_instructions.append(f"SERVICE {service_count}: {self._build_lb_instructions(config)}")
+
         # Combine all instructions
         all_services = "\n\n".join(service_instructions)
-        
+
         return f"""
-        COMPLETE AWS COST ESTIMATION WORKFLOW
-        
-        OBJECTIVE: Navigate to AWS Pricing Calculator and add multiple services to create a cost estimate.
-        
-        INITIAL SETUP:
+        🎯 COMPLETE AWS COST ESTIMATION WORKFLOW
+
+        📋 MISSION: Add {len(services_config)} services to AWS Pricing Calculator in a single estimate
+        Services to add: {', '.join(services_config.keys())}
+
+        🚀 PHASE 1: INITIAL SETUP
         1. Navigate to https://calculator.aws/#/addService
-        2. Wait for the page to fully load
-        3. Verify you can see the AWS Calculator interface with "Add service" functionality
-        
-        SERVICE ADDITION WORKFLOW:
+        2. Wait for the page to fully load (look for "Add service" interface)
+        3. Verify you can see the AWS Calculator with service search functionality
+        4. Take a moment to understand the page layout
+
+        ⚙️ PHASE 2: SERVICE ADDITION SEQUENCE
+        IMPORTANT: Add each service to the SAME estimate (do not create separate estimates)
+
         {all_services}
-        
-        FINAL STEPS:
-        1. After adding all services, look for "Share" or "Get estimate link" functionality
-        2. Generate shareable links for the estimate
-        3. Verify all services have been added successfully
-        
-        IMPORTANT GUIDELINES:
-        - Be patient and wait for pages to load completely
-        - Verify each action before proceeding to the next
-        - If an element is not found, scroll to find it
-        - Handle any error messages or validation issues
-        - Stay within the AWS Pricing Calculator domain
-        - Take time to explore each page before taking actions
-        
-        SUCCESS CRITERIA:
-        - All {len(services_config)} services are successfully added to the estimate
-        - No error messages are displayed
-        - Estimate is ready for sharing
+
+        🔗 PHASE 3: FINALIZATION
+        1. After adding ALL {len(services_config)} services, navigate to estimate summary
+        2. Look for "View summary" or similar button to see all added services
+        3. Verify all {len(services_config)} services are listed in the estimate
+        4. Look for "Share" or "Get estimate link" functionality
+        5. Generate a shareable public link for the complete estimate
+        6. Copy or note the final estimate URL
+
+        ⚠️ CRITICAL GUIDELINES:
+        - PATIENCE: Wait for each page to load completely before taking actions
+        - VERIFICATION: After each service addition, verify it was added successfully
+        - PERSISTENCE: If an element is not found, scroll or wait for it to appear
+        - ERROR HANDLING: If you encounter errors, try alternative approaches
+        - SINGLE ESTIMATE: All services must be added to the same estimate
+        - STAY FOCUSED: Remain within the AWS Pricing Calculator domain
+
+        ✅ SUCCESS CRITERIA:
+        - All {len(services_config)} services successfully added to ONE estimate
+        - No error messages or validation failures
+        - Final estimate link generated and accessible
+        - Estimate contains all requested services with correct configurations
+
+        🎯 EXPECTED OUTCOME: One comprehensive estimate link containing all {len(services_config)} services
         """
     
     def _build_ec2_instructions(self, config: Dict[str, Any]) -> str:
@@ -149,20 +182,34 @@ class UnifiedAWSBrowserAgent:
         region = config.get('region', 'US East (N. Virginia)')
         storage_type = config.get('storage_type', 'gp3')
         storage_size = config.get('storage_size', '20')
-        
+
         return f"""
-        ADD EC2 SERVICE:
-        1. Search for "EC2" in the service search box
-        2. Click "Configure" on the Amazon EC2 service card
-        3. Configure with these settings:
-           - Region: {region}
-           - Operating System: {operating_system}
-           - Instance Type: {instance_type}
-           - Number of instances: {quantity}
-           - Pricing model: On-Demand
-           - Storage: {storage_type}, {storage_size} GB
-        4. Click "Save and add service" to add to estimate
-        5. Wait for confirmation and return to main calculator page
+        🖥️ ADD AMAZON EC2 SERVICE:
+
+        Step 1: Service Selection
+        - In the service search box, type "EC2" and press Enter
+        - Wait for search results to filter
+        - Find "Amazon EC2" service card
+        - Click "Configure" button on the EC2 service card
+        - Wait for EC2 configuration page to load
+
+        Step 2: Configuration
+        Configure EC2 with these EXACT settings:
+        - Region: {region}
+        - Operating System: {operating_system}
+        - Instance Type: {instance_type}
+        - Number of instances: {quantity}
+        - Tenancy: Shared Instances (default)
+        - Pricing model: On-Demand
+        - Storage Type: {storage_type}
+        - Storage Size: {storage_size} GB
+
+        Step 3: Add to Estimate
+        - Scroll to bottom of configuration page
+        - Click "Save and add service" button
+        - Wait for confirmation message
+        - Verify you return to main calculator page
+        - Confirm EC2 service appears in estimate summary
         """
     
     def _build_rds_instructions(self, config: Dict[str, Any]) -> str:
@@ -172,19 +219,33 @@ class UnifiedAWSBrowserAgent:
         deployment = config.get('deployment', 'Single-AZ')
         storage_size = config.get('storage_size', '100')
         region = config.get('region', 'US East (N. Virginia)')
-        
+
         return f"""
-        ADD RDS SERVICE:
-        1. Search for "RDS" in the service search box
-        2. Click "Configure" on the Amazon RDS service card
-        3. Configure with these settings:
-           - Region: {region}
-           - Database Engine: {engine}
-           - Instance Class: {instance_class}
-           - Deployment: {deployment}
-           - Storage: {storage_size} GB
-        4. Click "Save and add service" to add to estimate
-        5. Wait for confirmation and return to main calculator page
+        🗄️ ADD AMAZON RDS SERVICE:
+
+        Step 1: Service Selection
+        - In the service search box, type "RDS" and press Enter
+        - Wait for search results to filter
+        - Find "Amazon RDS" service card
+        - Click "Configure" button on the RDS service card
+        - Wait for RDS configuration page to load
+
+        Step 2: Configuration
+        Configure RDS with these EXACT settings:
+        - Region: {region}
+        - Database Engine: {engine}
+        - Instance Class: {instance_class}
+        - Deployment Option: {deployment}
+        - Storage Type: General Purpose SSD (gp3) or default
+        - Storage Amount: {storage_size} GB
+        - Backup Retention: 7 days (default)
+
+        Step 3: Add to Estimate
+        - Scroll to bottom of configuration page
+        - Click "Save and add service" button
+        - Wait for confirmation message
+        - Verify you return to main calculator page
+        - Confirm RDS service appears in estimate summary
         """
     
     def _build_s3_instructions(self, config: Dict[str, Any]) -> str:
@@ -193,43 +254,83 @@ class UnifiedAWSBrowserAgent:
         storage_unit = config.get('storage_unit', 'GB')
         storage_class = config.get('storage_class', 'Standard')
         region = config.get('region', 'US East (N. Virginia)')
-        
+
         return f"""
-        ADD S3 SERVICE:
-        1. Search for "S3" in the service search box
-        2. Click "Configure" on the Amazon S3 service card
-        3. Configure with these settings:
-           - Region: {region}
-           - Storage Class: {storage_class}
-           - Storage Amount: {storage_amount} {storage_unit}
-        4. Click "Save and add service" to add to estimate
-        5. Wait for confirmation and return to main calculator page
+        🪣 ADD AMAZON S3 SERVICE:
+
+        Step 1: Service Selection
+        - In the service search box, type "S3" and press Enter
+        - Wait for search results to filter
+        - Find "Amazon S3" service card
+        - Click "Configure" button on the S3 service card
+        - Wait for S3 configuration page to load
+
+        Step 2: Configuration
+        Configure S3 with these EXACT settings:
+        - Region: {region}
+        - Storage Class: {storage_class}
+        - Storage Amount: {storage_amount} {storage_unit}
+        - Data Transfer: Default settings
+        - Requests: Default settings
+
+        Step 3: Add to Estimate
+        - Scroll to bottom of configuration page
+        - Click "Save and add service" button
+        - Wait for confirmation message
+        - Verify you return to main calculator page
+        - Confirm S3 service appears in estimate summary
         """
     
     def _build_vpc_instructions(self, config: Dict[str, Any]) -> str:
         """Build VPC service addition instructions"""
         return """
-        ADD VPC SERVICE:
-        1. Search for "VPC" in the service search box
-        2. Click "Configure" on the Amazon VPC service card
-        3. Configure with default settings:
-           - NAT Gateway: 1 instance
-           - Data Transfer: Default
-        4. Click "Save and add service" to add to estimate
-        5. Wait for confirmation and return to main calculator page
+        🌐 ADD AMAZON VPC SERVICE:
+
+        Step 1: Service Selection
+        - In the service search box, type "VPC" and press Enter
+        - Wait for search results to filter
+        - Find "Amazon VPC" service card
+        - Click "Configure" button on the VPC service card
+        - Wait for VPC configuration page to load
+
+        Step 2: Configuration
+        Configure VPC with these settings:
+        - NAT Gateway: 1 instance
+        - Data Transfer: Default settings
+        - VPC Endpoints: Default settings
+
+        Step 3: Add to Estimate
+        - Scroll to bottom of configuration page
+        - Click "Save and add service" button
+        - Wait for confirmation message
+        - Verify you return to main calculator page
+        - Confirm VPC service appears in estimate summary
         """
-    
+
     def _build_lb_instructions(self, config: Dict[str, Any]) -> str:
         """Build Load Balancer service addition instructions"""
         return """
-        ADD LOAD BALANCER SERVICE:
-        1. Search for "Load Balancer" or "ELB" in the service search box
-        2. Click "Configure" on the Elastic Load Balancing service card
-        3. Configure with default settings:
-           - Type: Application Load Balancer
-           - Number: 1
-        4. Click "Save and add service" to add to estimate
-        5. Wait for confirmation and return to main calculator page
+        ⚖️ ADD ELASTIC LOAD BALANCING SERVICE:
+
+        Step 1: Service Selection
+        - In the service search box, type "Load Balancer" or "ELB" and press Enter
+        - Wait for search results to filter
+        - Find "Elastic Load Balancing" service card
+        - Click "Configure" button on the ELB service card
+        - Wait for Load Balancer configuration page to load
+
+        Step 2: Configuration
+        Configure Load Balancer with these settings:
+        - Load Balancer Type: Application Load Balancer
+        - Number of Load Balancers: 1
+        - Data Processing: Default settings
+
+        Step 3: Add to Estimate
+        - Scroll to bottom of configuration page
+        - Click "Save and add service" button
+        - Wait for confirmation message
+        - Verify you return to main calculator page
+        - Confirm Load Balancer service appears in estimate summary
         """
 
     # Main interface methods
