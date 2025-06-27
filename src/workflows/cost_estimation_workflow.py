@@ -3,14 +3,22 @@ import logging
 from typing import Dict, Any, List, TypedDict
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 
-from src.agents.browser_agent import UnifiedAWSBrowserAgent
+from src.agents.service_orchestrator import ServiceOrchestrator
 from src.utils.template_parser import TemplateParser
+from src.utils.aws_config import get_bedrock_llm
 from src.monitoring.logger import (
     start_workflow_monitoring, end_workflow_monitoring,
     log_service_event, start_performance_monitoring,
     end_performance_monitoring
+)
+# Import service modules to register services
+from src.services import (
+    compute_services,
+    ai_ml_services,
+    database_services,
+    storage_services,
+    networking_services
 )
 
 logger = logging.getLogger(__name__)
@@ -28,17 +36,12 @@ class EstimationState(TypedDict):
     error_message: str
 
 class CostEstimationWorkflow:
-    def __init__(self, openai_api_key: str):
-        self.openai_api_key = openai_api_key
-        self.browser_agent = UnifiedAWSBrowserAgent(openai_api_key)
-        self.template_parser = TemplateParser(openai_api_key)
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            api_key=openai_api_key,
-            temperature=0.1
-        )
+    def __init__(self):
+        self.service_orchestrator = ServiceOrchestrator()
+        self.template_parser = TemplateParser()
+        self.llm = get_bedrock_llm(temperature=0.1)
         self.workflow = self._build_workflow()
-        logger.info("CostEstimationWorkflow initialized with UnifiedAWSBrowserAgent")
+        logger.info("CostEstimationWorkflow initialized with ServiceOrchestrator")
     
     def _build_workflow(self) -> StateGraph:
         """Build unified LangGraph workflow"""
@@ -129,11 +132,11 @@ class CostEstimationWorkflow:
         return state
     
     async def execute_complete_workflow(self, state: EstimationState) -> EstimationState:
-        """Execute complete workflow in single browser session"""
-        operation_id = start_performance_monitoring("complete_workflow")
+        """Execute complete workflow using service orchestrator"""
+        operation_id = start_performance_monitoring("service_orchestrated_workflow")
 
         try:
-            logger.info("🌐 Starting complete AWS Calculator workflow...")
+            logger.info("🎭 Starting service-orchestrated AWS Calculator workflow...")
 
             # Get all services configuration directly from parsed_services
             parsed_services = state.get("parsed_services", {})
@@ -149,32 +152,32 @@ class CostEstimationWorkflow:
                 # Fallback: use all parsed services if services_to_add is empty
                 all_services_config = parsed_services
 
-            logger.info(f"📋 Executing workflow for {len(all_services_config)} services: {list(all_services_config.keys())}")
+            logger.info(f"📋 Executing orchestrated workflow for {len(all_services_config)} services: {list(all_services_config.keys())}")
 
-            # Execute complete workflow in single browser session
-            result = await self.browser_agent.run_complete_workflow(all_services_config)
+            # Execute workflow using service orchestrator
+            result = await self.service_orchestrator.run_estimation(all_services_config)
 
             if result.get("status") == "success":
                 state["added_services"] = result.get("services_added", [])
                 state["estimate_links"] = result.get("estimate_links", {})
-                state["failed_services"] = []  # Clear failed services on success
-                logger.info(f"✅ Complete workflow successful: {len(state['added_services'])} services added")
+                state["failed_services"] = result.get("services_failed", [])
+                logger.info(f"✅ Orchestrated workflow successful: {len(state['added_services'])} services added")
                 end_performance_monitoring(operation_id, success=True,
                                          metadata={"services_count": len(state["added_services"])})
             else:
                 state["error_message"] = result.get("error", "Unknown workflow error")
                 state["failed_services"] = list(all_services_config.keys())
                 state["added_services"] = []
-                logger.error(f"❌ Complete workflow failed: {state['error_message']}")
+                logger.error(f"❌ Orchestrated workflow failed: {state['error_message']}")
                 end_performance_monitoring(operation_id, success=False,
                                          error_message=state["error_message"])
 
         except Exception as e:
-            error_msg = f"Complete workflow error: {str(e)}"
+            error_msg = f"Orchestrated workflow error: {str(e)}"
             state["error_message"] = error_msg
             state["failed_services"] = list(state.get("parsed_services", {}).keys())
             state["added_services"] = []
-            logger.error(f"❌ Complete workflow error: {e}")
+            logger.error(f"❌ Orchestrated workflow error: {e}")
             end_performance_monitoring(operation_id, success=False, error_message=error_msg)
 
         return state
@@ -296,8 +299,5 @@ class CostEstimationWorkflow:
             }
 
         finally:
-            # Cleanup browser session
-            try:
-                await self.browser_agent.cleanup_session()
-            except Exception as cleanup_error:
-                logger.warning(f"⚠️ Browser cleanup warning: {cleanup_error}")
+            # Cleanup is handled by service orchestrator
+            logger.info("🧹 Workflow cleanup completed")

@@ -92,10 +92,10 @@ def init_session_state():
     if 'show_debug_info' not in st.session_state:
         st.session_state.show_debug_info = False
 
-def setup_workflow(api_key: str):
-    """Setup workflow với API key"""
+def setup_workflow():
+    """Setup workflow"""
     if st.session_state.workflow is None:
-        st.session_state.workflow = CostEstimationWorkflow(api_key)
+        st.session_state.workflow = CostEstimationWorkflow()
     return st.session_state.workflow
 
 def display_predefined_templates():
@@ -177,28 +177,28 @@ def display_estimation_result(result: Dict[str, Any]):
                 # Also show individual pricing model links if different
                 if len(links) > 1:
                     with st.expander("📋 View All Pricing Models"):
-                        col1, col2 = st.columns(2)
+                        link_col1, link_col2 = st.columns(2)
 
-                        with col1:
+                        with link_col1:
                             if links.get('ondemand'):
                                 st.markdown("**On-Demand Pricing:**")
                                 st.markdown(f"[🔗 View On-Demand]({links['ondemand']})")
 
-                        with col2:
+                        with link_col2:
                             if links.get('savings_plan'):
                                 st.markdown("**Savings Plan:**")
                                 st.markdown(f"[🔗 View Savings Plan]({links['savings_plan']})")
             else:
                 # Fallback to showing individual links
-                col1, col2 = st.columns(2)
+                fallback_col1, fallback_col2 = st.columns(2)
 
-                with col1:
+                with fallback_col1:
                     if links.get('ondemand'):
                         st.markdown("**On-Demand Pricing:**")
                         st.markdown(f"[🔗 View On-Demand Estimate]({links['ondemand']})")
                         st.code(links['ondemand'], language='text')
 
-                with col2:
+                with fallback_col2:
                     if links.get('savings_plan'):
                         st.markdown("**1-Year Savings Plan (No Upfront):**")
                         st.markdown(f"[🔗 View Savings Plan Estimate]({links['savings_plan']})")
@@ -258,20 +258,48 @@ def main():
     with col1:
         st.markdown("### 🚀 Cost Estimation Request")
         
-        # API Key input (try to load from .env first)
-        default_api_key = os.getenv('OPENAI_API_KEY', '')
+        # AWS Credentials input (try to load from .env first)
+        st.markdown("### 🔐 AWS Bedrock Configuration")
+        cred_col1, cred_col2 = st.columns(2)
         
-        api_key = st.text_input(
-            "🔑 OpenAI API Key:",
-            type="password",
-            value=default_api_key if default_api_key != 'your-openai-api-key-here' else '',
-            help="API key được auto-load từ .env file. Bạn có thể override nếu cần."
-        )
+        with cred_col1:
+            aws_access_key = st.text_input(
+                "🔑 AWS Access Key ID:",
+                type="password",
+                value=os.getenv('AWS_ACCESS_KEY_ID', ''),
+                help="AWS Access Key ID cho Bedrock"
+            )
+            aws_region = st.selectbox(
+                "🌍 AWS Region:",
+                options=["us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1"],
+                index=0,
+                help="AWS Region có hỗ trợ Bedrock Claude"
+            )
+            
+        with cred_col2:
+            aws_secret_key = st.text_input(
+                "🔐 AWS Secret Access Key:",
+                type="password",
+                value=os.getenv('AWS_SECRET_ACCESS_KEY', ''),
+                help="AWS Secret Access Key cho Bedrock"
+            )
+            bedrock_model = st.selectbox(
+                "🤖 Bedrock Model:",
+                options=["anthropic.claude-3-5-sonnet-20240620-v1:0", "anthropic.claude-3-haiku-20240307-v1:0"],
+                index=0,
+                help="Select Claude model for cost estimation"
+            )
         
-        if not api_key:
-            st.warning("⚠️ Vui lòng nhập OpenAI API key hoặc cấu hình trong .env file")
-            st.info("💡 Tip: Copy env_example.txt thành .env và thêm API key để tự động load")
+        if not aws_access_key or not aws_secret_key:
+            st.warning("⚠️ Vui lòng nhập AWS credentials hoặc cấu hình trong .env file")
+            st.info("💡 Tip: Thêm AWS_ACCESS_KEY_ID và AWS_SECRET_ACCESS_KEY vào .env file")
             st.stop()
+        
+        # Set environment variables for the session
+        os.environ['AWS_ACCESS_KEY_ID'] = aws_access_key
+        os.environ['AWS_SECRET_ACCESS_KEY'] = aws_secret_key
+        os.environ['AWS_DEFAULT_REGION'] = aws_region
+        os.environ['BEDROCK_MODEL_ID'] = bedrock_model
         
         # User input
         user_input = st.text_area(
@@ -292,8 +320,8 @@ def main():
             
             # Setup workflow
             try:
-                workflow = setup_workflow(api_key)
-                st.success("✅ Workflow initialized successfully!")
+                workflow = setup_workflow()
+                st.success("✅ AWS Bedrock Workflow initialized successfully!")
             except Exception as e:
                 st.error(f"❌ Lỗi khởi tạo workflow: {str(e)}")
                 st.stop()
@@ -408,10 +436,10 @@ def main():
             st.markdown("### 📊 Performance")
             metrics = st.session_state.performance_metrics
 
-            col1, col2 = st.columns(2)
-            with col1:
+            perf_col1, perf_col2 = st.columns(2)
+            with perf_col1:
                 st.metric("Success Rate", f"{metrics.get('success_rate', 0):.1%}")
-            with col2:
+            with perf_col2:
                 st.metric("Avg Duration", f"{metrics.get('avg_duration', 0):.1f}s")
     
     # Display results
@@ -425,16 +453,16 @@ def main():
             st.markdown("---")
             st.markdown("## 🔧 Debug Information")
 
-            col1, col2 = st.columns(2)
+            debug_col1, debug_col2 = st.columns(2)
 
-            with col1:
+            with debug_col1:
                 st.markdown("### Performance Metrics")
                 if st.session_state.performance_metrics:
                     st.json(st.session_state.performance_metrics)
                 else:
                     st.info("No performance metrics available")
 
-            with col2:
+            with debug_col2:
                 st.markdown("### Workflow Events")
                 workflow_summary = enhanced_logger.workflow_monitor.get_workflow_summary()
                 st.json(workflow_summary)

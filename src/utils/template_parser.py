@@ -1,17 +1,13 @@
 import re
 import json
 from typing import Dict, List, Any, Tuple
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from config.predefined_templates import get_service_template, get_infrastructure_template, PREDEFINED_TEMPLATES
+from src.utils.aws_config import get_bedrock_llm
 
 class TemplateParser:
-    def __init__(self, openai_api_key: str):
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            api_key=openai_api_key,
-            temperature=0.1
-        )
+    def __init__(self):
+        self.llm = get_bedrock_llm(temperature=0.1)
     
     async def parse_user_requirement(self, user_input: str) -> Tuple[Dict[str, Any], List[str]]:
         """

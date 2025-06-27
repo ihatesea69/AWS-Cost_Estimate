@@ -1,1 +1,1 @@
-# Configuration and templates package 
+# Config package 

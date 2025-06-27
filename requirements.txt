@@ -1,6 +1,7 @@
 browser-use>=0.1.0
 langchain>=0.1.0
-langchain-openai>=0.1.0
+langchain-aws>=0.1.0
+boto3>=1.28.0
 langgraph>=0.1.0
 streamlit>=1.28.0
 selenium>=4.15.0
